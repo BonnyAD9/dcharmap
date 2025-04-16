@@ -1,0 +1,4 @@
+root = true
+
+[src/*.rs]
+indent_size = 4
