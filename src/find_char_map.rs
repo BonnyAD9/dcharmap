@@ -1,8 +1,8 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 
 pub fn find_char_map<'a>(
     words: &[String],
-    dict: &'a HashMap<usize, BTreeSet<String>>,
+    dict: &'a HashMap<usize, Vec<String>>,
 ) -> Vec<Vec<&'a str>> {
     let mut solutions =
         find_char_map_inner(words, dict, HashMap::new(), HashMap::new());
@@ -14,7 +14,7 @@ pub fn find_char_map<'a>(
 
 pub fn find_char_map_inner<'a>(
     words: &[String],
-    dict: &'a HashMap<usize, BTreeSet<String>>,
+    dict: &'a HashMap<usize, Vec<String>>,
     mut emap: HashMap<char, usize>,
     mut umap: HashMap<char, usize>,
 ) -> Vec<Vec<&'a str>> {

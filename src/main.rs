@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     fs::File,
     io::{BufRead, BufReader, stdin},
     process::ExitCode,
@@ -61,7 +61,7 @@ fn start() -> Result<()> {
 fn read_dict(
     input: impl BufRead,
     mut filter: impl FnMut(&str) -> bool,
-) -> Result<HashMap<usize, BTreeSet<String>>> {
+) -> Result<HashMap<usize, Vec<String>>> {
     let mut res = HashMap::new();
 
     for l in input.lines() {
@@ -73,8 +73,8 @@ fn read_dict(
         }
 
         res.entry(l.len())
-            .or_insert_with(BTreeSet::new)
-            .insert(l.to_string());
+            .or_insert_with(Vec::new)
+            .push(l.to_string());
     }
 
     Ok(res)
