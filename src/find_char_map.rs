@@ -100,7 +100,12 @@ impl FcmData {
 
         res.set_words(words);
         res.load_dict(di)?;
+
+        res.resolve_dependencies();
+        // this is optional optimization that requires `resolve_dependencies`
         res.sort_words();
+
+        res.create_word_map();
 
         Ok(res)
     }
@@ -152,7 +157,7 @@ impl FcmData {
         Ok(())
     }
 
-    fn sort_words(&mut self) {
+    fn resolve_dependencies(&mut self) {
         let mut deps = vec![];
         for (i0, word) in self.words.iter().enumerate() {
             let mut dep = 0;
@@ -173,7 +178,9 @@ impl FcmData {
         for (w, d) in self.words.iter_mut().zip(deps) {
             w.dependencies = d;
         }
+    }
 
+    fn sort_words(&mut self) {
         // Move the most limiting word as first.
         let Some((i, _)) = self
             .words
@@ -190,6 +197,17 @@ impl FcmData {
             (w.freedom(), self.dict.get(&w.urel).unwrap().len())
         });
 
+        let mut rel_map = HashMap::new();
+        for word in &mut self.words {
+            relative_representation(
+                word.s.chars(),
+                &mut word.rel,
+                &mut rel_map,
+            );
+        }
+    }
+
+    fn create_word_map(&mut self) {
         self.word_map = self
             .orig_words
             .iter()
@@ -202,15 +220,6 @@ impl FcmData {
                 unreachable!()
             })
             .collect();
-
-        let mut rel_map = HashMap::new();
-        for word in &mut self.words {
-            relative_representation(
-                word.s.chars(),
-                &mut word.rel,
-                &mut rel_map,
-            );
-        }
     }
 }
 
