@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 
 use itertools::Itertools;
 
@@ -10,13 +13,13 @@ pub struct WordTree<'a> {
 pub struct FcmData {
     orig_words: Vec<String>,
     word_map: Vec<usize>,
-    dict: HashMap<usize, Vec<String>>,
+    dict: HashMap<Vec<usize>, Vec<String>>,
     words: Vec<Word>,
 }
 
 struct Word {
     rel: Vec<usize>,
-    clen: usize,
+    urel: Vec<usize>,
 }
 
 impl FcmData {
@@ -28,7 +31,7 @@ impl FcmData {
     pub fn find_char_map_inner(
         &self,
         depth: usize,
-        mut umap: HashMap<char, usize>,
+        mut rmap: HashMap<char, usize>,
     ) -> Option<Vec<WordTree>> {
         let words = &self.words[depth..];
 
@@ -36,27 +39,27 @@ impl FcmData {
             return Some(vec![]);
         }
 
-        let mut urep = vec![];
+        let mut rel = vec![];
 
         let word = &words[0];
 
-        let opts = self.dict.get(&word.clen)?;
+        let opts = self.dict.get(&word.urel)?;
 
-        let len = umap.len();
+        let len = rmap.len();
 
         let mut res = vec![];
 
         for opt in opts {
-            relative_representation(opt, &mut urep, &mut umap);
-            if urep == word.rel {
+            relative_representation(opt.chars(), &mut rel, &mut rmap);
+            if rel == word.rel {
                 let branches =
-                    self.find_char_map_inner(depth + 1, umap.clone());
+                    self.find_char_map_inner(depth + 1, rmap.clone());
                 if let Some(next) = branches {
                     let tree = WordTree { word: opt, next };
                     res.push(tree)
                 }
             }
-            umap.retain(|_, e| *e < len);
+            rmap.retain(|_, e| *e < len);
         }
 
         (!res.is_empty()).then_some(res)
@@ -107,13 +110,14 @@ impl FcmData {
             .collect();
 
         let mut rel_map = HashMap::new();
+        let mut buf = HashMap::new();
         for word in procw {
             let mut rel = vec![];
-            relative_representation(word, &mut rel, &mut rel_map);
-            self.words.push(Word {
-                rel,
-                clen: word.len(),
-            });
+            let mut urel = vec![];
+            relative_representation(word.chars(), &mut rel, &mut rel_map);
+            buf.clear();
+            relative_representation(rel.iter().copied(), &mut urel, &mut buf);
+            self.words.push(Word { rel, urel });
         }
     }
 
@@ -123,6 +127,11 @@ impl FcmData {
     ) -> Result<(), E> {
         let lengths: HashSet<_> =
             self.orig_words.iter().map(|a| a.len()).unique().collect();
+
+        self.dict
+            .extend(self.words.iter().map(|r| (r.urel.clone(), vec![])));
+
+        let mut buf = HashMap::new();
         for s in i {
             let s = s?;
             let s = s.trim();
@@ -130,7 +139,15 @@ impl FcmData {
                 continue;
             }
 
-            self.dict.entry(s.len()).or_default().push(s.to_string());
+            let mut rel = vec![];
+            buf.clear();
+            relative_representation(s.chars(), &mut rel, &mut buf);
+            let rlen = rel.len();
+            self.dict.entry(rel).and_modify(|a| {
+                if rlen == s.len() {
+                    a.push(s.to_string())
+                }
+            });
         }
 
         Ok(())
@@ -162,13 +179,13 @@ impl<'a> WordTree<'a> {
     }
 }
 
-fn relative_representation(
-    s: &str,
+fn relative_representation<T: Hash + Eq>(
+    s: impl IntoIterator<Item = T>,
     res: &mut Vec<usize>,
-    map: &mut HashMap<char, usize>,
+    map: &mut HashMap<T, usize>,
 ) {
     res.clear();
-    res.extend(s.chars().map(|c| {
+    res.extend(s.into_iter().map(|c| {
         let len = map.len();
         *map.entry(c).or_insert(len)
     }));
