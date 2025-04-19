@@ -1,5 +1,4 @@
 use std::{
-    collections::{HashMap, HashSet},
     fs::File,
     io::{BufRead, BufReader, stdin},
     process::ExitCode,
@@ -7,8 +6,7 @@ use std::{
 
 use anyhow::Result;
 use args::Args;
-use find_char_map::find_char_map;
-use itertools::Itertools;
+use find_char_map::FcmData;
 use pareg::Pareg;
 
 mod args;
@@ -32,52 +30,22 @@ fn start() -> Result<()> {
         return Ok(());
     }
 
-    let mut words = args.words.iter().unique().cloned().collect_vec();
-    words.sort_unstable_by_key(|s| usize::MAX - s.len());
-
-    let lengths: HashSet<_> = words.iter().map(|a| a.len()).unique().collect();
-    let filter = |s: &str| lengths.contains(&s.len());
-
-    let dict = if let Some(f) = args.dict {
-        read_dict(BufReader::new(File::open(f)?), filter)?
+    let fcm = if let Some(f) = args.dict {
+        FcmData::new(args.words, BufReader::new(File::open(f)?).lines())?
     } else {
-        read_dict(stdin().lock(), filter)?
+        FcmData::new(args.words, stdin().lock().lines())?
     };
 
-    let solutions = find_char_map(&words, &dict);
+    let solutions = fcm.find_char_map();
 
     for s in solutions {
         s.walk(|s| {
-            for w in &args.words {
-                let word =
-                    &s[words.iter().find_position(|a| *a == w).unwrap().0];
-                print!("{word} ")
+            for i in fcm.word_map() {
+                print!("{} ", &s[*i]);
             }
-            println!()
+            println!();
         });
     }
 
     Ok(())
-}
-
-fn read_dict(
-    input: impl BufRead,
-    mut filter: impl FnMut(&str) -> bool,
-) -> Result<HashMap<usize, Vec<String>>> {
-    let mut res = HashMap::new();
-
-    for l in input.lines() {
-        let l = l?;
-        let l = l.trim();
-
-        if !filter(l) {
-            continue;
-        }
-
-        res.entry(l.len())
-            .or_insert_with(Vec::new)
-            .push(l.to_string());
-    }
-
-    Ok(res)
 }
