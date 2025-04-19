@@ -23,45 +23,64 @@ struct Word {
 
 impl FcmData {
     pub fn find_char_map(&self) -> Vec<WordTree> {
-        self.find_char_map_inner(0, HashMap::new())
-            .unwrap_or_default()
-    }
-
-    pub fn find_char_map_inner(
-        &self,
-        depth: usize,
-        mut rmap: HashMap<char, usize>,
-    ) -> Option<Vec<WordTree>> {
-        let words = &self.words[depth..];
-
-        if words.is_empty() {
-            return Some(vec![]);
+        if self.words.is_empty() {
+            return vec![];
         }
 
         let mut rel = vec![];
+        let mut rmap = HashMap::new();
+        let mut stack = vec![];
 
-        let word = &words[0];
+        let Some(opts) = self.dict.get(&self.words[0].urel) else {
+            return vec![];
+        };
 
-        let opts = self.dict.get(&word.urel)?;
+        let mut ret = None;
+        let mut ropt = vec![];
 
-        let len = rmap.len();
+        stack.push((vec![], rmap.len(), opts.iter()));
+        'outer: while let Some((mut res, len, mut opts)) = stack.pop() {
+            if let Some(next) = ret.take() {
+                res.push(WordTree {
+                    word: ropt.pop().unwrap(),
+                    next,
+                });
+            } else if ropt.len() > stack.len() {
+                ropt.pop();
+            }
 
-        let mut res = vec![];
+            while let Some(opt) = opts.next() {
+                if rmap.len() > len {
+                    if len == 0 {
+                        rmap.clear();
+                    } else {
+                        rmap.retain(|_, e| *e < len);
+                    }
+                }
 
-        for opt in opts {
-            relative_representation(opt.chars(), &mut rel, &mut rmap);
-            if rel == word.rel {
-                let branches =
-                    self.find_char_map_inner(depth + 1, rmap.clone());
-                if let Some(next) = branches {
-                    let tree = WordTree { word: opt, next };
-                    res.push(tree)
+                relative_representation(opt.chars(), &mut rel, &mut rmap);
+                if rel == self.words[stack.len()].rel {
+                    stack.push((res, len, opts));
+                    ropt.push(opt);
+
+                    let Some(opts) = self
+                        .words
+                        .get(stack.len())
+                        .and_then(|word| self.dict.get(&word.urel))
+                    else {
+                        ret = Some(vec![]);
+                        continue 'outer;
+                    };
+                    ret = None;
+                    stack.push((vec![], rmap.len(), opts.iter()));
+                    continue 'outer;
                 }
             }
-            rmap.retain(|_, e| *e < len);
+
+            ret = (!res.is_empty()).then_some(res);
         }
 
-        (!res.is_empty()).then_some(res)
+        ret.unwrap_or_default()
     }
 
     pub fn word_map(&self) -> &[usize] {
