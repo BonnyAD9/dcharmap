@@ -47,12 +47,14 @@ fn start() -> Result<()> {
     let solutions = find_char_map(&words, &dict);
 
     for s in solutions {
-        for w in &args.words {
-            let word = &s[words.iter().find_position(|a| *a == w).unwrap().0];
-            print!("{word} ")
-        }
-
-        println!()
+        s.walk(|s| {
+            for w in &args.words {
+                let word =
+                    &s[words.iter().find_position(|a| *a == w).unwrap().0];
+                print!("{word} ")
+            }
+            println!()
+        });
     }
 
     Ok(())

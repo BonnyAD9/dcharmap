@@ -1,0 +1,45 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'dcharmap'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=dcharmap",
+                    "--package=dcharmap"
+                ],
+                "filter": {
+                    "name": "dcharmap",
+                    "kind": "bin"
+                }
+            },
+            "args": ["-d", "tmp/cz.dic", "abcdef", "gchdi", "bja"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'dcharmap'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=dcharmap",
+                    "--package=dcharmap"
+                ],
+                "filter": {
+                    "name": "dcharmap",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
