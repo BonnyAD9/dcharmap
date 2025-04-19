@@ -15,6 +15,7 @@ pub struct FcmData {
 }
 
 struct Word {
+    s: String,
     rel: Vec<usize>,
     urel: Vec<usize>,
 }
@@ -79,42 +80,30 @@ impl FcmData {
 
         res.set_words(words);
         res.load_dict(di)?;
+        res.sort_words();
 
         Ok(res)
     }
 
     fn set_words(&mut self, words: Vec<String>) {
         self.orig_words = words;
-        let mut procw = self
+        let procw = self
             .orig_words
             .iter()
             .map(|w| w.as_str())
             .unique()
             .collect_vec();
-        procw.sort_unstable();
 
-        self.word_map = self
-            .orig_words
-            .iter()
-            .map(|w| {
-                for (i, pw) in procw.iter().enumerate() {
-                    if pw == w {
-                        return i;
-                    }
-                }
-                unreachable!()
-            })
-            .collect();
-
-        let mut rel_map = HashMap::new();
         let mut buf = HashMap::new();
         for word in procw {
-            let mut rel = vec![];
             let mut urel = vec![];
-            relative_representation(word.chars(), &mut rel, &mut rel_map);
             buf.clear();
-            relative_representation(rel.iter().copied(), &mut urel, &mut buf);
-            self.words.push(Word { rel, urel });
+            relative_representation(word.chars(), &mut urel, &mut buf);
+            self.words.push(Word {
+                rel: vec![],
+                urel,
+                s: word.to_string(),
+            });
         }
     }
 
@@ -137,6 +126,34 @@ impl FcmData {
         }
 
         Ok(())
+    }
+
+    fn sort_words(&mut self) {
+        self.words.sort_unstable_by_key(|w| {
+            usize::MAX - self.dict.get(&w.urel).unwrap().len()
+        });
+
+        self.word_map = self
+            .orig_words
+            .iter()
+            .map(|w| {
+                for (i, pw) in self.words.iter().enumerate() {
+                    if &pw.s == w {
+                        return i;
+                    }
+                }
+                unreachable!()
+            })
+            .collect();
+
+        let mut rel_map = HashMap::new();
+        for word in &mut self.words {
+            relative_representation(
+                word.s.chars(),
+                &mut word.rel,
+                &mut rel_map,
+            );
+        }
     }
 }
 
