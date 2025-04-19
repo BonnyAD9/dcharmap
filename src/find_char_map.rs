@@ -18,6 +18,7 @@ struct Word {
     s: String,
     rel: Vec<usize>,
     urel: Vec<usize>,
+    dependencies: u64,
 }
 
 impl FcmData {
@@ -94,15 +95,19 @@ impl FcmData {
             .unique()
             .collect_vec();
 
+        let mut rel_map = HashMap::new();
         let mut buf = HashMap::new();
         for word in procw {
+            let mut rel = vec![];
             let mut urel = vec![];
+            relative_representation(word.chars(), &mut rel, &mut rel_map);
             buf.clear();
-            relative_representation(word.chars(), &mut urel, &mut buf);
+            relative_representation(rel.iter().copied(), &mut urel, &mut buf);
             self.words.push(Word {
-                rel: vec![],
+                rel,
                 urel,
                 s: word.to_string(),
+                dependencies: 0,
             });
         }
     }
@@ -129,8 +134,41 @@ impl FcmData {
     }
 
     fn sort_words(&mut self) {
-        self.words.sort_unstable_by_key(|w| {
-            usize::MAX - self.dict.get(&w.urel).unwrap().len()
+        let mut deps = vec![];
+        for (i0, word) in self.words.iter().enumerate() {
+            let mut dep = 0;
+            for (i, w) in self.words.iter().enumerate() {
+                if i0 == i {
+                    continue;
+                }
+
+                for (i, c) in word.rel.iter().enumerate() {
+                    if w.rel.contains(c) {
+                        dep |= 1 << i;
+                    }
+                }
+            }
+            deps.push(dep);
+        }
+
+        for (w, d) in self.words.iter_mut().zip(deps) {
+            w.dependencies = d;
+        }
+
+        // Move the most limiting word as first.
+        let Some((i, _)) = self
+            .words
+            .iter()
+            .enumerate()
+            .max_by_key(|(_, w)| (w.dependencies.count_ones(), w.s.len()))
+        else {
+            return;
+        };
+        self.words.swap(0, i);
+
+        // Sort the words from least freedom to most freedom.
+        self.words[1..].sort_unstable_by_key(|w| {
+            (w.freedom(), self.dict.get(&w.urel).unwrap().len())
         });
 
         self.word_map = self
@@ -192,4 +230,10 @@ fn relative_representation<T: Hash + Eq>(
         let len = map.len();
         *map.entry(c).or_insert(len)
     }));
+}
+
+impl Word {
+    fn freedom(&self) -> usize {
+        self.urel.len() - self.dependencies.count_ones() as usize
+    }
 }
