@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    hash::Hash,
-};
+use std::{collections::HashMap, hash::Hash};
 
 use itertools::Itertools;
 
@@ -125,9 +122,6 @@ impl FcmData {
         &mut self,
         i: impl Iterator<Item = Result<String, E>>,
     ) -> Result<(), E> {
-        let lengths: HashSet<_> =
-            self.orig_words.iter().map(|a| a.len()).unique().collect();
-
         self.dict
             .extend(self.words.iter().map(|r| (r.urel.clone(), vec![])));
 
@@ -135,19 +129,11 @@ impl FcmData {
         for s in i {
             let s = s?;
             let s = s.trim();
-            if !lengths.contains(&s.len()) {
-                continue;
-            }
 
             let mut rel = vec![];
             buf.clear();
             relative_representation(s.chars(), &mut rel, &mut buf);
-            let rlen = rel.len();
-            self.dict.entry(rel).and_modify(|a| {
-                if rlen == s.len() {
-                    a.push(s.to_string())
-                }
-            });
+            self.dict.entry(rel).and_modify(|a| a.push(s.to_string()));
         }
 
         Ok(())
