@@ -10,7 +10,7 @@ pub struct WordTree<'a> {
 pub struct FcmData {
     orig_words: Vec<String>,
     word_map: Vec<usize>,
-    dict: HashMap<Vec<usize>, Vec<String>>,
+    dict: HashMap<Vec<usize>, HashMap<String, Vec<String>>>,
     words: Vec<Word>,
 }
 
@@ -19,6 +19,7 @@ struct Word {
     rel: Vec<usize>,
     urel: Vec<usize>,
     dependencies: u64,
+    back_dep: Vec<usize>,
 }
 
 impl FcmData {
@@ -29,9 +30,13 @@ impl FcmData {
 
         let mut rel = vec![];
         let mut rmap = HashMap::new();
+        let mut irmap = vec![];
         let mut stack = vec![];
+        let mut sbuf = String::new();
 
-        let Some(opts) = self.dict.get(&self.words[0].urel) else {
+        let Some(opts) =
+            self.dict.get(&self.words[0].urel).and_then(|o| o.get(""))
+        else {
             return vec![];
         };
 
@@ -56,19 +61,34 @@ impl FcmData {
                     } else {
                         rmap.retain(|_, e| *e < len);
                     }
+                    irmap.splice(len.., []);
                 }
 
-                relative_representation(opt.chars(), &mut rel, &mut rmap);
+                relative_representation_i(
+                    opt.chars(),
+                    &mut rel,
+                    &mut rmap,
+                    &mut irmap,
+                );
                 if rel == self.words[stack.len()].rel {
                     stack.push((res, len, opts));
                     ropt.push(opt);
 
-                    let Some(opts) = self
-                        .words
-                        .get(stack.len())
-                        .and_then(|word| self.dict.get(&word.urel))
-                    else {
+                    let Some(word) = self.words.get(stack.len()) else {
                         ret = Some(vec![]);
+                        continue 'outer;
+                    };
+                    let Some(opts) = self.dict.get(&word.urel).and_then(|o| {
+                        sbuf.clear();
+                        fixed_hash_map(
+                            &word.back_dep,
+                            &word.rel,
+                            &irmap,
+                            &mut sbuf,
+                        );
+                        o.get(&sbuf)
+                    }) else {
+                        ret = None;
                         continue 'outer;
                     };
                     ret = None;
@@ -99,11 +119,15 @@ impl FcmData {
         };
 
         res.set_words(words);
-        res.load_dict(di)?;
+        let dict = res.load_dict(di)?;
 
         res.resolve_dependencies();
         // this is optional optimization that requires `resolve_dependencies`
-        res.sort_words();
+        res.sort_words(&dict);
+
+        res.resolve_back_dependencies();
+        res.remap_dict(dict);
+        //res.specialize_back_deps();
 
         res.create_word_map();
 
@@ -132,6 +156,7 @@ impl FcmData {
                 urel,
                 s: word.to_string(),
                 dependencies: 0,
+                back_dep: vec![],
             });
         }
     }
@@ -139,9 +164,12 @@ impl FcmData {
     fn load_dict<E>(
         &mut self,
         i: impl Iterator<Item = Result<String, E>>,
-    ) -> Result<(), E> {
-        self.dict
-            .extend(self.words.iter().map(|r| (r.urel.clone(), vec![])));
+    ) -> Result<HashMap<Vec<usize>, Vec<String>>, E> {
+        let mut res: HashMap<_, _> = self
+            .words
+            .iter()
+            .map(|r| (r.urel.clone(), vec![]))
+            .collect();
 
         let mut buf = HashMap::new();
         for s in i {
@@ -151,10 +179,10 @@ impl FcmData {
             let mut rel = vec![];
             buf.clear();
             relative_representation(s.chars(), &mut rel, &mut buf);
-            self.dict.entry(rel).and_modify(|a| a.push(s.to_string()));
+            res.entry(rel).and_modify(|a| a.push(s.to_string()));
         }
 
-        Ok(())
+        Ok(res)
     }
 
     fn resolve_dependencies(&mut self) {
@@ -180,7 +208,45 @@ impl FcmData {
         }
     }
 
-    fn sort_words(&mut self) {
+    fn resolve_back_dependencies(&mut self) {
+        let mut deps = vec![];
+        for (i0, word) in self.words.iter().enumerate() {
+            let mut dep = vec![];
+            for w in self.words[..i0].iter() {
+                for (i, c) in word.rel.iter().enumerate() {
+                    if (w.dependencies & (1 << i)) != 0 && w.rel.contains(c) {
+                        dep.push(i);
+                    }
+                }
+            }
+            deps.push(dep);
+        }
+
+        for (w, d) in self.words.iter_mut().zip(deps) {
+            w.back_dep = d;
+        }
+    }
+
+    fn remap_dict(&mut self, mut dict: HashMap<Vec<usize>, Vec<String>>) {
+        let mut buf = String::new();
+        for w in &self.words {
+            let Some((k, s)) = dict.remove_entry(&w.urel) else {
+                continue;
+            };
+
+            let mut v: HashMap<String, Vec<String>> = HashMap::new();
+
+            for s in s {
+                buf.clear();
+                fixed_hash(&w.back_dep, &s, &mut buf);
+                v.entry(buf.clone()).or_default().push(s);
+            }
+
+            self.dict.insert(k, v);
+        }
+    }
+
+    fn sort_words(&mut self, dict: &HashMap<Vec<usize>, Vec<String>>) {
         // Move the most limiting word as first.
         let Some((i, _)) = self
             .words
@@ -194,7 +260,7 @@ impl FcmData {
 
         // Sort the words from least freedom to most freedom.
         self.words[1..].sort_unstable_by_key(|w| {
-            (w.freedom(), self.dict.get(&w.urel).unwrap().len())
+            (w.freedom(), dict.get(&w.urel).unwrap().len())
         });
 
         let mut rel_map = HashMap::new();
@@ -258,6 +324,43 @@ fn relative_representation<T: Hash + Eq>(
         let len = map.len();
         *map.entry(c).or_insert(len)
     }));
+}
+
+fn relative_representation_i<T: Hash + Eq + Copy>(
+    s: impl IntoIterator<Item = T>,
+    res: &mut Vec<usize>,
+    map: &mut HashMap<T, usize>,
+    imap: &mut Vec<T>,
+) {
+    res.clear();
+    res.extend(s.into_iter().map(|c| {
+        let len = map.len();
+        *map.entry(c).or_insert_with(|| {
+            imap.push(c);
+            len
+        })
+    }));
+}
+
+fn fixed_hash(dep: &[usize], w: &str, res: &mut String) {
+    let mut ci = w.char_indices();
+    let mut last = 0;
+    for d in dep {
+        let c = ci.nth(*d - last).unwrap().1;
+        last = *d + 1;
+        res.push(c);
+    }
+}
+
+fn fixed_hash_map(
+    dep: &[usize],
+    rel: &[usize],
+    map: &[char],
+    res: &mut String,
+) {
+    for i in dep {
+        res.push(map[rel[*i]]);
+    }
 }
 
 impl Word {
