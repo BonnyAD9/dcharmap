@@ -8,6 +8,7 @@ pub struct Args {
     pub dict: Option<String>,
     pub words: Vec<String>,
     pub exit: bool,
+    pub out: Option<String>,
 }
 
 impl Args {
@@ -22,6 +23,7 @@ impl Args {
                 }
                 "-d" | "--dictionary" => res.dict = Some(args.next_arg()?),
                 "-w" | "--word" => res.words.push(args.next_arg()?),
+                "-o" | "--output" => res.out = args.next_arg()?,
                 "--" => res
                     .words
                     .extend(args.remaining().iter().map(|a| a.to_string())),
