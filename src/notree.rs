@@ -1,8 +1,6 @@
-use std::collections::BTreeMap;
-
 #[derive(Debug)]
 pub struct Notree<K: Copy + Ord, V> {
-    nodes: BTreeMap<K, Notree<K, V>>,
+    nodes: Vec<(K, Notree<K, V>)>,
     leafs: Vec<V>,
 }
 
@@ -13,7 +11,14 @@ impl<K: Copy + Ord, V> Notree<K, V> {
             return;
         }
 
-        self.nodes.entry(key[0]).or_default().add(&key[1..], value);
+        //self.nodes.entry(key[0]).or_default().add(&key[1..], value);
+        match self.nodes.binary_search_by_key(&key[0], |a| a.0) {
+            Ok(idx) => self.nodes[idx].1.add(&key[1..], value),
+            Err(idx) => {
+                self.nodes.insert(idx, (key[0], Notree::default()));
+                self.nodes[idx].1.add(&key[1..], value)
+            }
+        }
     }
 
     pub fn no_values_to<'a>(
