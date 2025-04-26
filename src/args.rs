@@ -9,6 +9,7 @@ pub struct Args {
     pub words: Vec<String>,
     pub exit: bool,
     pub out: Option<String>,
+    pub progress: bool,
 }
 
 impl Args {
@@ -24,6 +25,7 @@ impl Args {
                 "-d" | "--dictionary" => res.dict = Some(args.next_arg()?),
                 "-w" | "--word" => res.words.push(args.next_arg()?),
                 "-o" | "--output" => res.out = args.next_arg()?,
+                "-p" | "--progress" => res.progress = true,
                 "--" => res
                     .words
                     .extend(args.remaining().iter().map(|a| a.to_string())),

@@ -9,6 +9,7 @@ use anyhow::Result;
 use args::Args;
 use find_char_map::{FcmData, WordTree};
 use pareg::Pareg;
+use termal::{printc, printcln};
 
 mod args;
 mod find_char_map;
@@ -26,7 +27,7 @@ fn main() -> ExitCode {
 }
 
 fn start() -> Result<()> {
-    let mut now = Instant::now();
+    let mut prev = Instant::now();
 
     let args = Args::parse(Pareg::args().get_ref())?;
 
@@ -34,9 +35,9 @@ fn start() -> Result<()> {
         return Ok(());
     }
 
-    let mut prev = now;
-    now = Instant::now();
+    let mut now = Instant::now();
     eprintln!("Arg parse: {:?}", now - prev);
+    prev = now;
 
     let fcm = if let Some(f) = args.dict {
         FcmData::new(args.words, BufReader::new(File::open(f)?).lines())?
@@ -44,11 +45,19 @@ fn start() -> Result<()> {
         FcmData::new(args.words, stdin().lock().lines())?
     };
 
-    prev = now;
     now = Instant::now();
     eprintln!("Initialization: {:?}", now - prev);
+    prev = now;
 
-    let solutions = fcm.find_char_map();
+    let solutions = if args.progress {
+        printc!("{'save}");
+        fcm.find_char_map(|p| {
+            let eta = (Instant::now() - prev).as_secs_f32() * (1. - p) / p;
+            printcln!("{'load e_}{:.2}% eta: {}s", p * 100., eta as i64);
+        })
+    } else {
+        fcm.find_char_map(drop)
+    };
 
     prev = now;
     now = Instant::now();

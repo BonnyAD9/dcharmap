@@ -32,6 +32,12 @@ from dictionary.
   {'y}-d  --dictionary{'_}
     Specify the dictionary file. By default this is stdin.
 
+  {'y}-o  --output{'_}
+    Specify output file. If not specified, write to stdout.
+
+  {'y}-p  --progress{'_}
+    Show progress.
+
   {'y}-w  --word{'_}
     Add word. This word may start with `{'i}-{'_}`.
 

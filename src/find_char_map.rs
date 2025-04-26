@@ -28,7 +28,10 @@ struct Word {
 }
 
 impl FcmData {
-    pub fn find_char_map(&self) -> Vec<WordTree> {
+    pub fn find_char_map(
+        &self,
+        mut progress: impl FnMut(f32),
+    ) -> Vec<WordTree> {
         if self.words.is_empty() {
             return vec![];
         }
@@ -49,11 +52,11 @@ impl FcmData {
         let mut ret = None;
         let mut ropt = vec![];
 
-        stack.push((
-            vec![],
-            rmap.len(),
-            opts.no_values([].iter().copied()).into_iter(),
-        ));
+        let opts = opts.no_values([].iter().copied());
+        let mut done = 0.;
+        let count = opts.len() as f32;
+
+        stack.push((vec![], rmap.len(), opts.into_iter()));
         'outer: while let Some((mut res, len, mut opts)) = stack.pop() {
             if let Some(next) = ret.take() {
                 res.push(WordTree {
@@ -65,6 +68,10 @@ impl FcmData {
             }
 
             while let Some(opt) = opts.next() {
+                if stack.is_empty() {
+                    progress(done / count);
+                    done += 1.;
+                }
                 if rmap.len() > len {
                     if len == 0 {
                         rmap.clear();
