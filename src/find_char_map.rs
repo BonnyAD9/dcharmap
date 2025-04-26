@@ -1,6 +1,11 @@
-use std::{collections::HashMap, hash::Hash};
+use std::{
+    collections::{BTreeSet, HashMap},
+    hash::Hash,
+};
 
 use itertools::Itertools;
+
+use crate::notree::Notree;
 
 pub struct WordTree<'a> {
     pub word: &'a str,
@@ -10,7 +15,7 @@ pub struct WordTree<'a> {
 pub struct FcmData {
     orig_words: Vec<String>,
     word_map: Vec<usize>,
-    dict: HashMap<Vec<usize>, HashMap<String, Vec<String>>>,
+    dict: HashMap<Vec<usize>, HashMap<String, Notree<char, String>>>,
     words: Vec<Word>,
 }
 
@@ -33,6 +38,7 @@ impl FcmData {
         let mut irmap = vec![];
         let mut stack = vec![];
         let mut sbuf = String::new();
+        let mut sorted = BTreeSet::<char>::new();
 
         let Some(opts) =
             self.dict.get(&self.words[0].urel).and_then(|o| o.get(""))
@@ -43,7 +49,11 @@ impl FcmData {
         let mut ret = None;
         let mut ropt = vec![];
 
-        stack.push((vec![], rmap.len(), opts.iter()));
+        stack.push((
+            vec![],
+            rmap.len(),
+            opts.no_values([].iter().copied()).into_iter(),
+        ));
         'outer: while let Some((mut res, len, mut opts)) = stack.pop() {
             if let Some(next) = ret.take() {
                 res.push(WordTree {
@@ -92,7 +102,21 @@ impl FcmData {
                         continue 'outer;
                     };
                     ret = None;
-                    stack.push((vec![], rmap.len(), opts.iter()));
+
+                    sorted.clear();
+                    sorted.extend(
+                        irmap[..len]
+                            .iter()
+                            .enumerate()
+                            .filter(|(i, _)| !word.rel.contains(i))
+                            .map(|(_, v)| v),
+                    );
+
+                    stack.push((
+                        vec![],
+                        rmap.len(),
+                        opts.no_values(sorted.iter().copied()).into_iter(),
+                    ));
                     continue 'outer;
                 }
             }
@@ -234,12 +258,14 @@ impl FcmData {
                 continue;
             };
 
-            let mut v: HashMap<String, Vec<String>> = HashMap::new();
+            let mut v: HashMap<String, Notree<char, String>> = HashMap::new();
 
             for s in s {
                 buf.clear();
                 fixed_hash(&w.back_dep, &s, &mut buf);
-                v.entry(buf.clone()).or_default().push(s);
+                let mut key: Vec<_> = s.chars().unique().collect();
+                key.sort_unstable();
+                v.entry(buf.clone()).or_default().add(&key, s);
             }
 
             self.dict.insert(k, v);

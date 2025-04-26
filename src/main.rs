@@ -13,6 +13,7 @@ use pareg::Pareg;
 mod args;
 mod find_char_map;
 mod help;
+mod notree;
 
 fn main() -> ExitCode {
     match start() {
